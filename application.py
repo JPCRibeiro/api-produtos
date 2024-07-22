@@ -1,6 +1,6 @@
-from flask import Flask # type: ignore
-from flask_cors import CORS # type: ignore
-from dotenv import load_dotenv # type: ignore
+from flask import Flask 
+from flask_cors import CORS 
+from dotenv import load_dotenv 
 import mysql.connector
 import json
 import os
@@ -35,3 +35,6 @@ def get_produtos():
   )
   
   return response
+
+if __name__ == "__main__":
+  application.run()
