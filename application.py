@@ -1,4 +1,4 @@
-from flask import Flask 
+from flask import Flask, jsonify
 from flask_cors import CORS 
 from dotenv import load_dotenv 
 import mysql.connector
@@ -16,25 +16,30 @@ def index():
 
 @application.route("/api/produtos")
 def get_produtos():
-  conexao = mysql.connector.connect(
-    host=os.getenv('DB_HOST'),
-    user=os.getenv('DB_USER'),
-    password=os.getenv('DB_PASSWORD'),
-    database=os.getenv('DB_NAME')
-  )
+  try:
+    conexao = mysql.connector.connect(
+      host=os.getenv('DB_HOST'),
+      user=os.getenv('DB_USER'),
+      password=os.getenv('DB_PASSWORD'),
+      database=os.getenv('DB_NAME')
+    )
 
-  cursor = conexao.cursor(dictionary=True)
-  cursor.execute('SELECT * FROM produtos')
-  produtos = cursor.fetchall()
-  cursor.close()
-  conexao.close()
-  
-  response = application.response_class(
-    response=json.dumps(produtos, ensure_ascii=False).encode('utf8'),
-    mimetype='application/json'
-  )
-  
-  return response
+    cursor = conexao.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM produtos')
+    produtos = cursor.fetchall()
+    cursor.close()
+    conexao.close()
+
+    response = application.response_class(
+      response=json.dumps(produtos, ensure_ascii=False).encode('utf8'),
+      mimetype='application/json'
+    )
+
+    return response
+  except mysql.connector.Error as err:
+    return jsonify({"error": str(err)}), 500
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
   application.run()
