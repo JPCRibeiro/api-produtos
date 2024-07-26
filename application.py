@@ -41,5 +41,32 @@ def get_produtos():
   except Exception as e:
     return jsonify({"error": str(e)}), 500
 
+@application.route("/api/produtos/<slug>")
+def get_produto(slug):
+  try:
+    conexao = mysql.connector.connect(
+      host=os.getenv('DB_HOST'),
+      user=os.getenv('DB_USER'),
+      password=os.getenv('DB_PASSWORD'),
+      database=os.getenv('DB_NAME')
+    )
+
+    cursor = conexao.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM produtos WHERE slug = %s', (slug,))
+    produto = cursor.fetchone()
+    cursor.close()
+    conexao.close()
+
+    response = application.response_class(
+      response=json.dumps(produto, ensure_ascii=False).encode('utf8'),
+      mimetype='application/json'
+    )
+
+    return response
+  except mysql.connector.Error as err:
+    return jsonify({"error": str(err)}), 500
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
   application.run()
