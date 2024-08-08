@@ -108,6 +108,77 @@ def get_fichas(cursor, produto_id):
   )
 
   return response
+    
+@application.route("/api/registro", methods=['POST'])
+@conexao_db
+def register(cursor):
+    username = request.json['username']
+    email = request.json['email']
+
+    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+    existing_user = cursor.fetchone()
+    
+    if existing_user:
+      return jsonify({"error": "Email já registrado"}), 400
+    
+    password = request.json['password']
+    hashed_password = generate_password_hash(password)
+    cursor.execute('INSERT INTO users (username, email, password) VALUES (%s, %s, %s)', (username, email, hashed_password))
+
+    response = {
+      "message": "Conta criada com sucesso",
+      "user": {
+        "username": username,
+        "email": email
+      }
+    }
+
+    return jsonify(response), 201
+
+@application.route("/api/login", methods=['POST'])
+@conexao_db
+def login(cursor):
+  email = request.json['email']
+  password = request.json['password']
+
+  if not email or not password:
+    return jsonify({"error": "Email e senha são necessários"}), 400
+
+  cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+  user = cursor.fetchone()
+
+  if user and check_password_hash(user['password'], password):
+    username = user['username']
+    token = jwt.encode({"username": username, "email": email}, os.getenv('JWT_KEY'), algorithm="HS256")
+
+    response = {
+      "message": "Usuário autenticado",
+      "token": token,
+      "user": {
+        "username": username,
+        "email": email
+      }
+    }
+  
+    return jsonify(response), 200
+  else:
+    return jsonify({"error": "Credenciais inválidas"}), 401
+  
+@application.route("/api/user", methods=['GET'])
+@conexao_db
+@token_required
+def get_user(current_user, cursor):
+  cursor.execute('SELECT * FROM users WHERE username = %s', (current_user['username'],))
+  user = cursor.fetchone()
+
+  if user:
+    user_info = {
+      "username": user['username'],
+      "email": user['email'],
+    }
+    return jsonify(user_info), 200
+  else:
+    return jsonify({"error": "Usuário não encontrado"}), 404
   
 if __name__ == "__main__":
   application.debug = True
