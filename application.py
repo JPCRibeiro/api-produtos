@@ -1,11 +1,12 @@
-from flask import Flask, jsonify, request # type: ignore
-from flask_cors import CORS # type: ignore
-from dotenv import load_dotenv # type: ignore
+from flask import Flask, jsonify, request 
+from flask_cors import CORS 
+from dotenv import load_dotenv 
 import mysql.connector
 import json
 import os
-from werkzeug.security import generate_password_hash, check_password_hash # type: ignore
-import jwt # type: ignore
+from werkzeug.security import generate_password_hash, check_password_hash 
+import jwt 
+import datetime
 from functools import wraps
 
 load_dotenv()
@@ -37,30 +38,6 @@ def conexao_db(f):
       cursor.close()
       conexao.close()
     return resultado
-  return decorated
-  
-def token_required(f):
-  @wraps(f)
-  def decorated(*args, **kwargs):
-    token = None
-
-    if 'Authorization' in request.headers:
-      token = request.headers['Authorization']
-      if token.startswith('Bearer '):
-        token = token.split(" ")[1]
-
-    if not token:
-      return jsonify({'message' : 'Token is missing!'}), 401
-    
-    try:
-      data = jwt.decode(token, os.getenv('JWT_KEY'), algorithms=["HS256"])
-      current_user = {
-        "username": data['username'],
-        "email": data['email']
-      }
-    except:
-      return jsonify({'message' : 'Token is invalid!'}), 401
-    return f(current_user, *args, **kwargs)
   return decorated
 
 @application.route("/")
@@ -112,28 +89,35 @@ def get_fichas(cursor, produto_id):
 @application.route("/api/registro", methods=['POST'])
 @conexao_db
 def register(cursor):
-    username = request.json['username']
-    email = request.json['email']
+  username = request.json['username']
+  email = request.json['email']
 
-    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
-    existing_user = cursor.fetchone()
-    
-    if existing_user:
-      return jsonify({"error": "Email já registrado"}), 400
-    
-    password = request.json['password']
-    hashed_password = generate_password_hash(password)
-    cursor.execute('INSERT INTO users (username, email, password) VALUES (%s, %s, %s)', (username, email, hashed_password))
+  errors = []
 
-    response = {
-      "message": "Conta criada com sucesso",
-      "user": {
-        "username": username,
-        "email": email
-      }
+  cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+  if cursor.fetchone():
+    errors.append('Email já cadastrado')
+
+  cursor.execute('SELECT * FROM users WHERE username = %s', (username,))
+  if cursor.fetchone():
+    errors.append('Nome de usuário já cadastrado')
+
+  if errors:
+    return jsonify({"error": errors}), 401
+    
+  password = request.json['password']
+  hashed_password = generate_password_hash(password)
+  cursor.execute('INSERT INTO users (username, email, password) VALUES (%s, %s, %s)', (username, email, hashed_password))
+
+  response = {
+    "message": "Conta criada com sucesso",
+    "user": {
+      "username": username,
+      "email": email
     }
+  }
 
-    return jsonify(response), 201
+  return jsonify(response), 201
 
 @application.route("/api/login", methods=['POST'])
 @conexao_db
@@ -149,7 +133,13 @@ def login(cursor):
 
   if user and check_password_hash(user['password'], password):
     username = user['username']
-    token = jwt.encode({"username": username, "email": email}, os.getenv('JWT_KEY'), algorithm="HS256")
+    token = jwt.encode({
+      "username": username, 
+      "email": email,
+      "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+    }, os.getenv('JWT_KEY'), algorithm="HS256")
+
+    print(token)
 
     response = {
       "message": "Usuário autenticado",
@@ -166,19 +156,39 @@ def login(cursor):
   
 @application.route("/api/user", methods=['GET'])
 @conexao_db
-@token_required
-def get_user(current_user, cursor):
-  cursor.execute('SELECT * FROM users WHERE username = %s', (current_user['username'],))
-  user = cursor.fetchone()
+def get_user(cursor):
+  token = None
 
-  if user:
-    user_info = {
-      "username": user['username'],
-      "email": user['email'],
+  if 'Authorization' in request.headers:
+    token = request.headers['Authorization']
+    if token.startswith('Bearer '):
+      token = token.split(" ")[1]
+
+  try:
+    data = jwt.decode(token, os.getenv('JWT_KEY'), algorithms=["HS256"])
+    current_user = {
+      "username": data['username'],
+      "email": data['email']
     }
-    return jsonify(user_info), 200
-  else:
-    return jsonify({"error": "Usuário não encontrado"}), 404
+
+    cursor.execute('SELECT * FROM users WHERE email = %s', (current_user['email'],))
+    user = cursor.fetchone()
+
+    print(user)
+
+    if user:
+      user_info = {
+        "username": user['username'],
+        "email": user['email'],
+      }
+      return jsonify(user_info), 200
+    else:
+      return jsonify({"error": "Usuário não encontrado"}), 404
+    
+  except jwt.ExpiredSignatureError:
+    return jsonify({"error": "Token expirado"}), 401
+  except jwt.InvalidTokenError:
+    return jsonify({"error": "Token inválido"}), 401
   
 if __name__ == "__main__":
   application.debug = True
