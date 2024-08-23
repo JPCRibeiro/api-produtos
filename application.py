@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request 
-from flask_cors import CORS 
+from flask_cors import CORS, cross_origin
 from dotenv import load_dotenv 
 import mysql.connector
 import json
@@ -44,7 +44,7 @@ def conexao_db(f):
 def index():
   return 'Hello!'
 
-@application.route("/api/produtos")
+@application.route("/api/produtos", methods=['GET'])
 @conexao_db
 def get_produtos(cursor):
   cursor.execute('SELECT * FROM produtos')
@@ -57,7 +57,7 @@ def get_produtos(cursor):
 
   return response
 
-@application.route("/api/produtos/<slug>")
+@application.route("/api/produtos/<slug>", methods=['GET'])
 @conexao_db
 def get_produto(cursor, slug):
   cursor.execute('SELECT * FROM produtos WHERE slug = %s', (slug,))
@@ -70,7 +70,7 @@ def get_produto(cursor, slug):
 
   return response
 
-@application.route("/api/fichas/<produto_id>")
+@application.route("/api/fichas/<produto_id>", methods=['GET'])
 @conexao_db
 def get_fichas(cursor, produto_id):
   cursor.execute('SELECT * FROM fichas WHERE produto_id = %s', (produto_id,))
@@ -85,7 +85,7 @@ def get_fichas(cursor, produto_id):
   )
 
   return response
-    
+        
 @application.route("/api/registro", methods=['POST'])
 @conexao_db
 def register(cursor):
@@ -139,8 +139,6 @@ def login(cursor):
       "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
     }, os.getenv('JWT_KEY'), algorithm="HS256")
 
-    print(token)
-
     response = {
       "message": "Usuário autenticado",
       "token": token,
@@ -174,13 +172,44 @@ def get_user(cursor):
     cursor.execute('SELECT * FROM users WHERE email = %s', (current_user['email'],))
     user = cursor.fetchone()
 
-    print(user)
-
     if user:
+      cursor.execute('SELECT * FROM orders WHERE user_id = %s', (user['id'],))
+      orders = cursor.fetchall()
+
+      user_orders = []
+
+      for order in orders:
+        cursor.execute('SELECT * FROM orders_items WHERE order_id = %s', (order['id'],))
+        order_items = cursor.fetchall()
+
+        formatted_items = []
+
+        for item in order_items:
+          cursor.execute('SELECT * FROM produtos WHERE id = %s', (item['produto_id'],))
+          product = cursor.fetchone()
+          
+          formatted_items.append({
+            "produto_id": item['produto_id'],
+            "produto": product['produto'],
+            "imagem": product['imagem'],
+            "quantidade": item['quantidade'],
+            "valor": item['valor']
+          })
+
+        user_orders.append({
+          "id": order['id'],
+          "created": order['order_created'],
+          "produtos": formatted_items
+        })
+
       user_info = {
         "username": user['username'],
         "email": user['email'],
+        "orders": user_orders
       }
+
+      print(user_info)
+
       return jsonify(user_info), 200
     else:
       return jsonify({"error": "Usuário não encontrado"}), 404
@@ -189,7 +218,32 @@ def get_user(cursor):
     return jsonify({"error": "Token expirado"}), 401
   except jwt.InvalidTokenError:
     return jsonify({"error": "Token inválido"}), 401
-  
+
+@application.route("/api/order", methods=['POST'])
+@conexao_db
+def post_order(cursor):
+  email = request.json['email']
+  produtos = request.json['produtos']
+  print(produtos)
+
+  cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+  user = cursor.fetchone()
+  user_id = user['id']
+  order_time = datetime.datetime.now()
+  formatted_order_time = order_time.strftime("%Y-%m-%d %H:%M:%S")
+
+  cursor.execute('INSERT INTO orders (user_id, order_created) VALUES (%s, %s)', (user_id, formatted_order_time))
+  order_id = cursor.lastrowid
+
+  for produto in produtos:
+    product_price = produto['valor']
+    product_qnt = produto['quantidade']
+    product_id = produto['id']
+
+    cursor.execute('INSERT INTO orders_items (valor, quantidade, order_id, produto_id) VALUES (%s, %s, %s, %s)', (product_price, product_qnt, order_id, product_id))
+
+  return jsonify({"message": "Pedido recebido"}), 201
+
 if __name__ == "__main__":
   application.debug = True
   application.run()
