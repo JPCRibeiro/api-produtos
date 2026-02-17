@@ -45,12 +45,11 @@ def get_produtos(cursor):
   cursor.execute('SELECT * FROM produtos')
   produtos = cursor.fetchall()
 
-  response = application.response_class(
-    response = json.dumps(produtos, ensure_ascii=False).encode('utf8'),
-    mimetype = 'application/json'
-  )
+  for p in produtos:
+    if "valor" in p and p["valor"] is not None:
+      p["valor"] = float(p["valor"])
 
-  return response
+  return jsonify(produtos)
 
 @application.route("/api/produtos/<slug>", methods=['GET'])
 @conexao_db
@@ -58,12 +57,10 @@ def get_produto(cursor, slug):
   cursor.execute('SELECT * FROM produtos WHERE slug = %s', (slug,))
   produto = cursor.fetchone()
 
-  response = application.response_class(
-    response = json.dumps(produto, ensure_ascii=False).encode('utf8'),
-    mimetype = 'application/json'
-  )
+  if produto and "valor" in produto and produto["valor"] is not None:
+    produto["valor"] = float(produto["valor"])
 
-  return response
+  return jsonify(produto)
 
 @application.route("/api/fichas/<produto_id>", methods=['GET'])
 @conexao_db
@@ -72,14 +69,17 @@ def get_fichas(cursor, produto_id):
   fichas = cursor.fetchall()
 
   for ficha in fichas:
-    ficha['dados'] = json.loads(ficha['dados'])
+    if 'dados' in ficha and ficha['dados']:
+      try:
+        ficha['dados'] = json.loads(ficha['dados'])
+      except Exception:
+        pass
 
-  response = application.response_class(
-    response = json.dumps(fichas, ensure_ascii=False).encode('utf8'),
-    mimetype = 'application/json'
-  )
+    for key, value in ficha.items():
+      if isinstance(value, Decimal):
+        ficha[key] = float(value)
 
-  return response
+  return jsonify(fichas)
         
 @application.route("/api/registro", methods=['POST'])
 @conexao_db
