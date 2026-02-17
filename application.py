@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request 
 from flask_cors import CORS, cross_origin
 from dotenv import load_dotenv 
-import mysql.connector
+import psycopg2
+import psycopg2.extras
 import json
 import os
 from werkzeug.security import generate_password_hash, check_password_hash 
@@ -17,12 +18,8 @@ CORS(application)
 def conexao_db(f):
   @wraps(f)
   def decorated(*args, **kwargs):
-    conexao = mysql.connector.connect(
-      host = os.getenv('DB_HOST'),
-      user = os.getenv('DB_USER'),
-      password = os.getenv('DB_PASSWORD'),
-      database = os.getenv('DB_NAME')
-    )
+    conexao = psycopg2.connect(os.getenv("DB_URL"))
+    cursor = conexao.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     cursor = conexao.cursor(dictionary=True)
 
