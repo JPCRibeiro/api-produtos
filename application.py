@@ -24,7 +24,7 @@ def conexao_db(f):
     try:
       resultado = f(cursor, *args, **kwargs)
       conexao.commit()
-    except mysql.connector.Error as err:
+    except psycopg2.Error as err:
       conexao.rollback()
       return jsonify({"error": str(err)}), 500
     except Exception as e:
