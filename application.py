@@ -21,8 +21,6 @@ def conexao_db(f):
     conexao = psycopg2.connect(os.getenv("DB_URL"))
     cursor = conexao.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    cursor = conexao.cursor(dictionary=True)
-
     try:
       resultado = f(cursor, *args, **kwargs)
       conexao.commit()
